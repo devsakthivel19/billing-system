@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from rest_framework.exceptions import ValidationError
-
+from apps.billing.exceptions import InvalidDenominationException
 from apps.billing.models import Denomination
 
 
@@ -30,13 +29,11 @@ class DenominationService:
             ValidationError: If exact balance cannot be produced.
         """
         if balance_amount < Decimal("0"):
-            raise ValidationError({"balance_amount": "Balance cannot be negative."})
+            raise InvalidDenominationException({"balance_amount": "Balance cannot be negative."})
 
         remaining = int(balance_amount)
         if Decimal(remaining) != balance_amount:
-            raise ValidationError(
-                {"balance_amount": "Balance denominations require whole-number amount."}
-            )
+            raise InvalidDenominationException({"balance_amount": "Balance denominations require whole-number amount."})
 
         result: dict[int, int] = {}
         for denomination in sorted(denominations, key=lambda item: item.value, reverse=True):
@@ -48,7 +45,7 @@ class DenominationService:
                 remaining -= denomination.value * quantity
 
         if remaining != 0:
-            raise ValidationError(
+            raise InvalidDenominationException(
                 {"denominations": "Exact balance cannot be produced with available denominations."}
             )
         return result
@@ -68,4 +65,3 @@ class DenominationService:
             quantity = selected_quantities.get(denomination.value, 0)
             if quantity:
                 denomination.available_quantity -= quantity
-                denomination.save(update_fields=["available_quantity"])
