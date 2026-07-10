@@ -1,0 +1,11 @@
+body {
+    background: #f7f8fa;
+}
+
+main.container {
+    max-width: 1100px;
+}
+
+.table {
+    background: #fff;
+}
