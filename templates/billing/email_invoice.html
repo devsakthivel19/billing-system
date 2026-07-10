@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<body>
+    <h1>Invoice {{ invoice.invoice_number }}</h1>
+    <p>Customer: {{ invoice.customer.email }}</p>
+    <table border="1" cellpadding="6" cellspacing="0">
+        <thead>
+        <tr>
+            <th>Product</th>
+            <th>Quantity</th>
+            <th>Total</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for item in invoice.items.all %}
+            <tr>
+                <td>{{ item.product.name }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>{{ item.total_price }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <p>Subtotal: {{ invoice.subtotal }}</p>
+    <p>Tax: {{ invoice.tax_amount }}</p>
+    <p>Net price: {{ invoice.total_amount }}</p>
+    <p>Rounded down net price: {{ invoice.rounded_total_amount }}</p>
+    <p>Paid: {{ invoice.paid_amount }}</p>
+    <p>Balance: {{ invoice.balance_amount }}</p>
+</body>
+</html>

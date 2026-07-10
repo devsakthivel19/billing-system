@@ -1,0 +1,96 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}Generate Bill{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h1 class="h3 mb-0">Generate Bill</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'billing_web:purchase-history-page' %}">Purchase History</a>
+</div>
+
+<div id="billing-alert" class="alert d-none"></div>
+
+<form id="billing-form" class="vstack gap-4">
+    {% csrf_token %}
+    <section class="border rounded p-3">
+        <h2 class="h5 mb-3">Customer</h2>
+        <label class="form-label" for="customer_email">Customer Email</label>
+        <input
+            class="form-control"
+            id="customer_email"
+            name="customer_email"
+            type="email"
+            autocomplete="email"
+            inputmode="email"
+            required
+        >
+    </section>
+
+    <section class="border rounded p-3">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h2 class="h5 mb-0">Products</h2>
+            <button class="btn btn-outline-primary btn-sm" type="button" id="add-row">Add New</button>
+        </div>
+        <div id="product-rows" class="vstack gap-2">
+            <div class="row g-2 product-row">
+                <div class="col-md-8">
+                    <label class="form-label">Product ID</label>
+                    <select class="form-select product-id" required>
+                        <option value="">Choose product</option>
+                        {% for product in products %}
+                            <option value="{{ product.product_id }}">
+                                {{ product.product_id }} - {{ product.name }} | Stock {{ product.available_stock }} | {{ product.unit_price }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Quantity</label>
+                    <input class="form-control quantity" type="number" min="1" value="1" required>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button class="btn btn-outline-danger w-100 remove-row" type="button">X</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="border rounded p-3">
+        <h2 class="h5 mb-3">Denominations Available in Shop</h2>
+        <div class="row g-2">
+            {% for denomination in denominations %}
+                <div class="col-6 col-md-3">
+                    <div class="border rounded p-2 h-100">
+                        <label class="form-label fw-semibold" for="denomination_{{ denomination.value }}">
+                            {{ denomination.value }} Count
+                        </label>
+                        <input
+                            class="form-control denomination-count"
+                            id="denomination_{{ denomination.value }}"
+                            type="number"
+                            min="0"
+                            value="{{ denomination.available_quantity }}"
+                            data-value="{{ denomination.value }}"
+                        >
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="border rounded p-3">
+        <h2 class="h5 mb-3">Payment</h2>
+        <label class="form-label" for="paid_amount">Cash Paid by Customer</label>
+        <input class="form-control" id="paid_amount" name="paid_amount" type="number" step="0.01" min="0" required>
+    </section>
+
+    <div class="d-flex justify-content-end">
+        <button class="btn btn-primary" type="submit">Generate Bill</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/billing.js' %}"></script>
+{% endblock %}

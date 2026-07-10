@@ -1,0 +1,15 @@
+[run]
+source = apps
+omit =
+    */migrations/*
+    */tests/*
+    */admin.py
+    */apps.py
+    */__init__.py
+    apps/common/mixins.py
+    apps/common/pagination.py
+    apps/common/permissions.py
+
+[report]
+skip_empty = True
+show_missing = True

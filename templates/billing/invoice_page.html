@@ -1,0 +1,85 @@
+{% extends "base/base.html" %}
+
+{% block title %}Invoice {{ invoice.invoice_number }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h1 class="h3 mb-0">Invoice {{ invoice.invoice_number }}</h1>
+    <a class="btn btn-outline-primary btn-sm" href="{% url 'billing_web:billing-page' %}">New Bill</a>
+</div>
+
+<section class="border rounded p-3 mb-3">
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="text-muted small">Customer</div>
+            <div class="fw-semibold">{{ invoice.customer.email }}</div>
+        </div>
+        <div class="col-md-6 text-md-end">
+            <div class="text-muted small">Created</div>
+            <div>{{ invoice.created_at|date:"d-m-Y H:i" }}</div>
+        </div>
+    </div>
+</section>
+
+<section class="table-responsive mb-3">
+    <table class="table table-bordered align-middle">
+        <thead class="table-light">
+        <tr>
+            <th>Product ID</th>
+            <th>Name</th>
+            <th class="text-end">Qty</th>
+            <th class="text-end">Unit Price</th>
+            <th class="text-end">Tax %</th>
+            <th class="text-end">Tax</th>
+            <th class="text-end">Total</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for item in invoice.items.all %}
+            <tr>
+                <td>{{ item.product.product_id }}</td>
+                <td>{{ item.product.name }}</td>
+                <td class="text-end">{{ item.quantity }}</td>
+                <td class="text-end">{{ item.unit_price }}</td>
+                <td class="text-end">{{ item.tax_percentage }}</td>
+                <td class="text-end">{{ item.tax_amount }}</td>
+                <td class="text-end">{{ item.total_price }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<div class="row g-3">
+    <section class="col-lg-6">
+        <div class="border rounded p-3">
+            <h2 class="h5">Totals</h2>
+            <dl class="row mb-0">
+                <dt class="col-6">Subtotal</dt><dd class="col-6 text-end">{{ invoice.subtotal }}</dd>
+                <dt class="col-6">Tax</dt><dd class="col-6 text-end">{{ invoice.tax_amount }}</dd>
+                <dt class="col-6">Net Price</dt><dd class="col-6 text-end">{{ invoice.total_amount }}</dd>
+                <dt class="col-6">Rounded Down Net Price</dt><dd class="col-6 text-end">{{ invoice.rounded_total_amount }}</dd>
+                <dt class="col-6">Paid</dt><dd class="col-6 text-end">{{ invoice.paid_amount }}</dd>
+                <dt class="col-6">Balance</dt><dd class="col-6 text-end">{{ invoice.balance_amount }}</dd>
+            </dl>
+        </div>
+    </section>
+    <section class="col-lg-6">
+        <div class="border rounded p-3">
+            <h2 class="h5">Denominations Returned</h2>
+            {% if invoice.balance_denominations.exists %}
+                <ul class="list-group list-group-flush">
+                    {% for entry in invoice.balance_denominations.all %}
+                        <li class="list-group-item d-flex justify-content-between px-0">
+                            <span>{{ entry.denomination.value }}</span>
+                            <span>{{ entry.quantity_given }}</span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="text-muted mb-0">No balance returned.</p>
+            {% endif %}
+        </div>
+    </section>
+</div>
+{% endblock %}
