@@ -21,6 +21,7 @@ from apps.billing.repositories import (
 )
 from apps.billing.tasks import send_invoice_email_task
 from apps.common.utils import quantize_money
+from apps.customers.models import Customer
 from apps.customers.repositories import CustomerRepository
 from apps.products.models import Product
 from apps.products.repositories import ProductRepository
@@ -37,6 +38,17 @@ class InvoiceLineCalculation:
     subtotal: Decimal
     tax_amount: Decimal
     total_price: Decimal
+
+
+@dataclass(frozen=True)
+class InvoiceTotals:
+    """Calculated invoice totals."""
+
+    subtotal: Decimal
+    tax_amount: Decimal
+    total_amount: Decimal
+    rounded_total_amount: Decimal
+    balance_amount: Decimal
 
 
 class InvoiceService:
@@ -78,69 +90,47 @@ class InvoiceService:
             paid_amount = validated_data["paid_amount"]
             item_payloads = validated_data["items"]
 
-            product_ids = [item["product_id"] for item in item_payloads]
-            products = list(ProductRepository.lock_active_by_product_ids(product_ids))
-            product_map = {product.product_id: product for product in products}
-
-            missing = sorted(set(product_ids) - set(product_map))
-            if missing:
-                raise ValidationError({"items": f"Products not found: {', '.join(missing)}"})
-
+            product_map = InvoiceService._get_locked_product_map(item_payloads)
             line_calculations = InvoiceService._calculate_lines(item_payloads, product_map)
-            subtotal = quantize_money(sum((line.subtotal for line in line_calculations), Decimal("0.00")))
-            tax_amount = quantize_money(sum((line.tax_amount for line in line_calculations), Decimal("0.00")))
-            total_amount = quantize_money(subtotal + tax_amount)
-            rounded_total_amount = InvoiceService._round_down_for_cash(total_amount)
-
-            if paid_amount < rounded_total_amount:
-                raise ValidationError(
-                    {"paid_amount": f"Insufficient cash paid. Paid amount must be at least {rounded_total_amount}."}
-                )
-
-            balance_amount = quantize_money(paid_amount - rounded_total_amount)
-            denominations = list(DenominationRepository.lock_all())
-            InvoiceService._apply_submitted_denomination_counts(
-                denominations,
-                validated_data.get("denominations", []),
+            totals = InvoiceService._calculate_totals(line_calculations, paid_amount)
+            denominations, returned_denominations = InvoiceService._calculate_returned_denominations(
+                balance_amount=totals.balance_amount,
+                submitted_denominations=validated_data.get("denominations", []),
             )
-            returned_denominations = DenominationService.calculate_greedy(balance_amount, denominations)
 
             customer, _created = CustomerRepository.get_or_create_by_email(customer_email)
-            invoice = InvoiceRepository.create(
-                invoice_number=InvoiceService._generate_invoice_number(),
-                customer=customer,
-                subtotal=subtotal,
-                tax_amount=tax_amount,
-                total_amount=total_amount,
-                paid_amount=paid_amount,
-                balance_amount=balance_amount,
-            )
-
-            InvoiceRepository.bulk_create_items(
-                build_invoice_item(
-                    invoice=invoice,
-                    product=line.product,
-                    quantity=line.quantity,
-                    tax_amount=line.tax_amount,
-                    total_price=line.total_price,
-                )
-                for line in line_calculations
-            )
+            invoice = InvoiceService._persist_invoice(customer, totals, paid_amount)
+            InvoiceService._persist_invoice_items(invoice, line_calculations)
             InvoiceService._deduct_stock(line_calculations)
             DenominationService.apply_deductions(denominations, returned_denominations)
             DenominationRepository.bulk_update_quantities(denominations)
-            InvoiceRepository.bulk_create_balance_denominations(
-                BalanceDenomination(
-                    invoice=invoice,
-                    denomination=InvoiceService._find_denomination(denominations, value),
-                    quantity_given=quantity,
-                )
-                for value, quantity in returned_denominations.items()
-            )
+            InvoiceService._persist_balance_denominations(invoice, denominations, returned_denominations)
 
             transaction.on_commit(lambda: send_invoice_email_task.delay(invoice.id))
             logger.info("Invoice generated", extra={"invoice_id": invoice.id})
             return InvoiceRepository.get_by_id(invoice.id) or invoice
+
+    @staticmethod
+    def _get_locked_product_map(item_payloads: list[dict[str, Any]]) -> dict[str, Product]:
+        """Lock and return products referenced by invoice line payloads.
+
+        Args:
+            item_payloads: Validated item payloads.
+
+        Returns:
+            Mapping of product ID to locked product.
+
+        Raises:
+            ValidationError: If any product is missing.
+        """
+        product_ids = [item["product_id"] for item in item_payloads]
+        products = list(ProductRepository.lock_active_by_product_ids(product_ids))
+        product_map = {product.product_id: product for product in products}
+
+        missing = sorted(set(product_ids) - set(product_map))
+        if missing:
+            raise ValidationError({"items": f"Products not found: {', '.join(missing)}"})
+        return product_map
 
     @staticmethod
     def _calculate_lines(
@@ -172,18 +162,122 @@ class InvoiceService:
                         )
                     }
                 )
-            line_subtotal = quantize_money(product.unit_price * quantity)
-            line_tax = quantize_money(line_subtotal * product.tax_percentage / Decimal("100"))
-            lines.append(
-                InvoiceLineCalculation(
-                    product=product,
-                    quantity=quantity,
-                    subtotal=line_subtotal,
-                    tax_amount=line_tax,
-                    total_price=quantize_money(line_subtotal + line_tax),
-                )
-            )
+            lines.append(InvoiceService._calculate_line(product, quantity))
         return lines
+
+    @staticmethod
+    def _calculate_line(product: Product, quantity: int) -> InvoiceLineCalculation:
+        """Calculate amount details for one invoice line.
+
+        Args:
+            product: Purchased product.
+            quantity: Purchased quantity.
+
+        Returns:
+            Calculated invoice line.
+        """
+        line_subtotal = quantize_money(product.unit_price * quantity)
+        line_tax = quantize_money(line_subtotal * product.tax_percentage / Decimal("100"))
+        return InvoiceLineCalculation(
+            product=product,
+            quantity=quantity,
+            subtotal=line_subtotal,
+            tax_amount=line_tax,
+            total_price=quantize_money(line_subtotal + line_tax),
+        )
+
+    @staticmethod
+    def _calculate_totals(lines: list[InvoiceLineCalculation], paid_amount: Decimal) -> InvoiceTotals:
+        """Calculate invoice totals and validate paid amount.
+
+        Args:
+            lines: Calculated invoice lines.
+            paid_amount: Amount paid by customer.
+
+        Returns:
+            Calculated invoice totals.
+
+        Raises:
+            ValidationError: If paid amount is below the rounded total.
+        """
+        subtotal = quantize_money(sum((line.subtotal for line in lines), Decimal("0.00")))
+        tax_amount = quantize_money(sum((line.tax_amount for line in lines), Decimal("0.00")))
+        total_amount = quantize_money(subtotal + tax_amount)
+        rounded_total_amount = InvoiceService._round_down_for_cash(total_amount)
+
+        if paid_amount < rounded_total_amount:
+            raise ValidationError(
+                {"paid_amount": f"Insufficient cash paid. Paid amount must be at least {rounded_total_amount}."}
+            )
+
+        return InvoiceTotals(
+            subtotal=subtotal,
+            tax_amount=tax_amount,
+            total_amount=total_amount,
+            rounded_total_amount=rounded_total_amount,
+            balance_amount=quantize_money(paid_amount - rounded_total_amount),
+        )
+
+    @staticmethod
+    def _calculate_returned_denominations(
+        *,
+        balance_amount: Decimal,
+        submitted_denominations: list[dict[str, Any]],
+    ) -> tuple[list[Denomination], dict[int, int]]:
+        """Calculate balance denominations using locked cash inventory.
+
+        Args:
+            balance_amount: Balance amount to return.
+            submitted_denominations: Cash-drawer quantities submitted from the billing page.
+
+        Returns:
+            Locked denominations and selected returned denomination quantities.
+        """
+        denominations = list(DenominationRepository.lock_all())
+        InvoiceService._apply_submitted_denomination_counts(denominations, submitted_denominations)
+        returned_denominations = DenominationService.calculate_greedy(balance_amount, denominations)
+        return denominations, returned_denominations
+
+    @staticmethod
+    def _persist_invoice(customer: Customer, totals: InvoiceTotals, paid_amount: Decimal) -> Invoice:
+        """Persist the invoice header.
+
+        Args:
+            customer: Customer that purchased the invoice items.
+            totals: Calculated invoice totals.
+            paid_amount: Amount paid by customer.
+
+        Returns:
+            Created invoice.
+        """
+        return InvoiceRepository.create(
+            invoice_number=InvoiceService._generate_invoice_number(),
+            customer=customer,
+            subtotal=totals.subtotal,
+            tax_amount=totals.tax_amount,
+            total_amount=totals.total_amount,
+            paid_amount=paid_amount,
+            balance_amount=totals.balance_amount,
+        )
+
+    @staticmethod
+    def _persist_invoice_items(invoice: Invoice, lines: list[InvoiceLineCalculation]) -> None:
+        """Persist invoice line items in bulk.
+
+        Args:
+            invoice: Created invoice.
+            lines: Calculated invoice lines.
+        """
+        InvoiceRepository.bulk_create_items(
+            build_invoice_item(
+                invoice=invoice,
+                product=line.product,
+                quantity=line.quantity,
+                tax_amount=line.tax_amount,
+                total_price=line.total_price,
+            )
+            for line in lines
+        )
 
     @staticmethod
     def _deduct_stock(lines: list[InvoiceLineCalculation]) -> None:
@@ -198,6 +292,28 @@ class InvoiceService:
         logger.info(
             "Product stock deducted",
             extra={"product_count": len(lines)},
+        )
+
+    @staticmethod
+    def _persist_balance_denominations(
+        invoice: Invoice,
+        denominations: list[Denomination],
+        returned_denominations: dict[int, int],
+    ) -> None:
+        """Persist balance denomination rows in bulk.
+
+        Args:
+            invoice: Created invoice.
+            denominations: Locked denomination rows.
+            returned_denominations: Mapping of denomination value to returned quantity.
+        """
+        InvoiceRepository.bulk_create_balance_denominations(
+            BalanceDenomination(
+                invoice=invoice,
+                denomination=InvoiceService._find_denomination(denominations, value),
+                quantity_given=quantity,
+            )
+            for value, quantity in returned_denominations.items()
         )
 
     @staticmethod

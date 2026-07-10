@@ -20,7 +20,15 @@ class ProductRepository:
         Returns:
             QuerySet containing active products.
         """
-        return Product.objects.filter(is_active=True)
+        return Product.objects.only(
+            "id",
+            "product_id",
+            "name",
+            "available_stock",
+            "unit_price",
+            "tax_percentage",
+            "is_active",
+        ).filter(is_active=True)
 
     @staticmethod
     def get_active_by_product_id(product_id: str) -> Product | None:
@@ -48,20 +56,6 @@ class ProductRepository:
             product_id__in=list(product_ids),
             is_active=True,
         )
-
-    @staticmethod
-    def save(product: Product, update_fields: list[str] | None = None) -> Product:
-        """Persist a product instance.
-
-        Args:
-            product: Product to persist.
-            update_fields: Optional list of updated fields.
-
-        Returns:
-            Saved product instance.
-        """
-        product.save(update_fields=update_fields)
-        return product
 
     @staticmethod
     def bulk_update_stock(products: Iterable[Product]) -> None:

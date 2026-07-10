@@ -22,7 +22,7 @@ class DenominationRepository:
         Returns:
             QuerySet of denominations ordered by value descending.
         """
-        return Denomination.objects.all()
+        return Denomination.objects.only("id", "value", "available_quantity").all()
 
     @staticmethod
     def lock_all() -> QuerySet[Denomination]:
@@ -73,6 +73,18 @@ class InvoiceRepository:
             Invoice instance when found, otherwise ``None``.
         """
         return InvoiceRepository.list_all().filter(id=invoice_id).first()
+
+    @staticmethod
+    def list_by_customer_email(email: str) -> QuerySet[Invoice]:
+        """Return invoices for customers matching an email search term.
+
+        Args:
+            email: Customer email search text.
+
+        Returns:
+            QuerySet of matching invoices with related data preloaded.
+        """
+        return InvoiceRepository.list_all().filter(customer__email__icontains=email.strip())
 
     @staticmethod
     def create(

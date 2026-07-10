@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from smtplib import SMTPException
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
@@ -34,7 +35,7 @@ class InvoiceEmailService:
         message.attach_alternative(html_body, "text/html")
         try:
             message.send(fail_silently=False)
-        except Exception as exc:
+        except (OSError, SMTPException) as exc:
             logger.exception("Invoice email delivery failed", extra={"invoice_id": invoice.id})
             raise EmailDeliveryException() from exc
         logger.info("Invoice email sent", extra={"invoice_id": invoice.id})

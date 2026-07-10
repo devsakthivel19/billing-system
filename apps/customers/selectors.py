@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.db.models import QuerySet
 
 from apps.billing.models import Invoice
+from apps.billing.repositories import InvoiceRepository
 
 
 def get_customer_invoices(email: str) -> QuerySet[Invoice]:
@@ -16,8 +17,4 @@ def get_customer_invoices(email: str) -> QuerySet[Invoice]:
     Returns:
         QuerySet of invoices for matching customers.
     """
-    return (
-        Invoice.objects.select_related("customer")
-        .prefetch_related("items__product", "balance_denominations__denomination")
-        .filter(customer__email__icontains=email.strip())
-    )
+    return InvoiceRepository.list_by_customer_email(email)
