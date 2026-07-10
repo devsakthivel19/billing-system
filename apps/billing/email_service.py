@@ -7,6 +7,7 @@ import logging
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 
+from apps.billing.exceptions import EmailDeliveryException
 from apps.billing.invoice_service import InvoiceRenderService
 from apps.billing.models import Invoice
 
@@ -31,5 +32,9 @@ class InvoiceEmailService:
             to=[invoice.customer.email],
         )
         message.attach_alternative(html_body, "text/html")
-        message.send(fail_silently=False)
+        try:
+            message.send(fail_silently=False)
+        except Exception as exc:
+            logger.exception("Invoice email delivery failed", extra={"invoice_id": invoice.id})
+            raise EmailDeliveryException() from exc
         logger.info("Invoice email sent", extra={"invoice_id": invoice.id})

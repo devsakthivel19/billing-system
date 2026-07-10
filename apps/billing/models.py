@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_FLOOR
+from decimal import ROUND_FLOOR, Decimal
 
 from django.core.validators import MinValueValidator
 from django.db import models
 
-from apps.common.constants import MONEY_DECIMAL_PLACES, MONEY_MAX_DIGITS
-from apps.common.constants import PERCENTAGE_DECIMAL_PLACES, PERCENTAGE_MAX_DIGITS
+from apps.common.constants import (
+    MONEY_DECIMAL_PLACES,
+    MONEY_MAX_DIGITS,
+    PERCENTAGE_DECIMAL_PLACES,
+    PERCENTAGE_MAX_DIGITS,
+)
 from apps.common.validators import validate_percentage
 
 
