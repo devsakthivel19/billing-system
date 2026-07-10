@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from smtplib import SMTPException
 
 import pytest
 from django.core import mail
@@ -53,7 +54,7 @@ def test_invoice_email_service_raises_domain_exception_on_delivery_failure(
 
     def raise_delivery_error(*args: object, **kwargs: object) -> None:
         """Raise a fake mail-provider failure."""
-        raise RuntimeError("SMTP unavailable")
+        raise SMTPException("SMTP unavailable")
 
     monkeypatch.setattr("django.core.mail.EmailMultiAlternatives.send", raise_delivery_error)
 
