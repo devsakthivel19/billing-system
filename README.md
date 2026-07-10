@@ -65,6 +65,7 @@ billing_system/
 │   ├── urls.py
 │   ├── asgi.py
 │   └── wsgi.py
+├── screenshots/
 ├── static/
 ├── templates/
 ├── .github/workflows/ci.yml
@@ -96,6 +97,32 @@ billing_system/
 | GET | `/admin/` | Django admin | Manage products, denominations, customers, and invoices |
 
 All endpoint handlers are implemented through serializers, selectors, repositories, and services.
+
+## Screenshots
+
+### Billing Page
+
+![Billing Page](screenshots/billing-page.png)
+
+### Generated Invoice
+
+![Generated Invoice](screenshots/generated-bill.png)
+
+### Purchase History
+
+![Purchase History](screenshots/purchase-history.png)
+
+### Invoice Details
+
+![Invoice Details](screenshots/purchase-detail.png)
+
+### Invoice Email
+
+![Invoice Email](screenshots/email.png)
+
+### Django Admin
+
+![Admin](screenshots/admin-products.png)
 
 ## ER Diagram
 
