@@ -14,10 +14,8 @@ def main() -> None:
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
-        raise ImportError(
-            "Couldn't import Django. Make sure dependencies are installed and "
-            "the virtual environment is activated."
-        ) from exc
+        error_message = "Couldn't import Django. Install dependencies and activate the virtual environment."
+        raise ImportError(error_message) from exc
 
     execute_from_command_line(sys.argv)
 

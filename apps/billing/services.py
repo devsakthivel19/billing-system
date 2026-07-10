@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_FLOOR
+from decimal import ROUND_FLOOR, Decimal
 from typing import Any
 from uuid import uuid4
 
@@ -12,6 +12,7 @@ from django.db import transaction
 from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.billing.denomination_service import DenominationService
+from apps.billing.exceptions import InsufficientStockException, InvalidDenominationException
 from apps.billing.models import BalanceDenomination, Denomination, Invoice
 from apps.billing.repositories import (
     DenominationRepository,
@@ -93,12 +94,7 @@ class InvoiceService:
 
             if paid_amount < rounded_total_amount:
                 raise ValidationError(
-                    {
-                        "paid_amount": (
-                            "Insufficient cash paid. Paid amount must be at least "
-                            f"{rounded_total_amount}."
-                        )
-                    }
+                    {"paid_amount": f"Insufficient cash paid. Paid amount must be at least {rounded_total_amount}."}
                 )
 
             balance_amount = quantize_money(paid_amount - rounded_total_amount)
@@ -132,6 +128,7 @@ class InvoiceService:
             )
             InvoiceService._deduct_stock(line_calculations)
             DenominationService.apply_deductions(denominations, returned_denominations)
+            DenominationRepository.bulk_update_quantities(denominations)
             InvoiceRepository.bulk_create_balance_denominations(
                 BalanceDenomination(
                     invoice=invoice,
@@ -167,7 +164,7 @@ class InvoiceService:
             product = product_map[item["product_id"]]
             quantity = item["quantity"]
             if product.available_stock < quantity:
-                raise ValidationError(
+                raise InsufficientStockException(
                     {
                         "items": (
                             f"Insufficient stock for {product.product_id} ({product.name}). "
@@ -197,7 +194,11 @@ class InvoiceService:
         """
         for line in lines:
             line.product.available_stock -= line.quantity
-            line.product.save(update_fields=["available_stock", "updated_at"])
+        ProductRepository.bulk_update_stock(line.product for line in lines)
+        logger.info(
+            "Product stock deducted",
+            extra={"product_count": len(lines)},
+        )
 
     @staticmethod
     def _apply_submitted_denomination_counts(
@@ -221,14 +222,13 @@ class InvoiceService:
             item["value"] for item in submitted_denominations if item["value"] not in denomination_map
         )
         if unknown_values:
-            raise ValidationError(
+            raise InvalidDenominationException(
                 {"denominations": f"Unknown denominations: {', '.join(map(str, unknown_values))}"}
             )
 
         for item in submitted_denominations:
             denomination = denomination_map[item["value"]]
             denomination.available_quantity = item["count"]
-            denomination.save(update_fields=["available_quantity"])
 
     @staticmethod
     def _round_down_for_cash(total_amount: Decimal) -> Decimal:
@@ -259,7 +259,7 @@ class InvoiceService:
         for denomination in denominations:
             if denomination.value == value:
                 return denomination
-        raise ValidationError({"denominations": f"Denomination {value} is not configured."})
+        raise InvalidDenominationException({"denominations": f"Denomination {value} is not configured."})
 
     @staticmethod
     def _generate_invoice_number() -> str:

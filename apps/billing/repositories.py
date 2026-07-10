@@ -33,6 +33,18 @@ class DenominationRepository:
         """
         return Denomination.objects.select_for_update().all()
 
+    @staticmethod
+    def bulk_update_quantities(denominations: Iterable[Denomination]) -> None:
+        """Persist denomination quantity changes.
+
+        Args:
+            denominations: Denomination instances with updated quantities.
+        """
+        denomination_list = list(denominations)
+        if not denomination_list:
+            return
+        Denomination.objects.bulk_update(denomination_list, ["available_quantity"])
+
 
 class InvoiceRepository:
     """Persistence operations for invoices."""

@@ -21,10 +21,14 @@ def send_invoice_email_task(self: object, invoice_id: int) -> None:
         invoice_id: Invoice primary key.
     """
     try:
-        invoice = Invoice.objects.select_related("customer").prefetch_related(
-            "items__product",
-            "balance_denominations__denomination",
-        ).get(id=invoice_id)
+        invoice = (
+            Invoice.objects.select_related("customer")
+            .prefetch_related(
+                "items__product",
+                "balance_denominations__denomination",
+            )
+            .get(id=invoice_id)
+        )
         InvoiceEmailService.send_invoice_email(invoice)
     except Invoice.DoesNotExist:
         logger.warning("Invoice email skipped because invoice does not exist", extra={"invoice_id": invoice_id})

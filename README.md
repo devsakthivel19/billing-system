@@ -67,6 +67,7 @@ billing_system/
 │   └── wsgi.py
 ├── static/
 ├── templates/
+├── .github/workflows/ci.yml
 ├── manage.py
 ├── pytest.ini
 ├── requirements.txt
@@ -177,6 +178,9 @@ Create an environment file:
 ```bash
 cp .env.example .env
 ```
+
+For production-like runs, always set a strong `DJANGO_SECRET_KEY`, configure
+`DJANGO_ALLOWED_HOSTS`, and keep `DJANGO_DEBUG=False`.
 
 Use SQLite locally by keeping:
 
@@ -305,7 +309,7 @@ Run with coverage:
 pytest --cov=apps --cov-report=term-missing
 ```
 
-Planned coverage areas:
+Covered areas:
 
 - Models
 - Repositories
@@ -322,6 +326,17 @@ Planned coverage areas:
 - Serializer validation
 - Negative cases
 - Concurrent invoice generation
+
+## Code Quality
+
+The project includes Black, isort, Flake8, pytest, and a GitHub Actions workflow.
+
+```bash
+find apps config -path '*/migrations/*' -prune -o -path '*/__pycache__/*' -prune -o -name '*.py' -print | xargs -n1 black --check
+isort --check-only apps config manage.py
+flake8 apps config
+pytest
+```
 
 ## Docker
 

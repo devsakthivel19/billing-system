@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from django.db.models import QuerySet
+from django.utils import timezone
 
 from apps.products.models import Product
 
@@ -61,3 +62,19 @@ class ProductRepository:
         """
         product.save(update_fields=update_fields)
         return product
+
+    @staticmethod
+    def bulk_update_stock(products: Iterable[Product]) -> None:
+        """Persist stock changes for products.
+
+        Args:
+            products: Product instances with updated stock.
+        """
+        product_list = list(products)
+        if not product_list:
+            return
+
+        updated_at = timezone.now()
+        for product in product_list:
+            product.updated_at = updated_at
+        Product.objects.bulk_update(product_list, ["available_stock", "updated_at"])
