@@ -9,6 +9,7 @@ from django.core import mail
 from django.test import override_settings
 
 from apps.billing.email_service import InvoiceEmailService
+from apps.billing.exceptions import EmailDeliveryException
 from apps.billing.models import Invoice
 from apps.billing.tasks import send_invoice_email_task
 from apps.customers.models import Customer
@@ -41,6 +42,23 @@ def test_invoice_email_service_sends_message(invoice: Invoice) -> None:
 
     assert len(mail.outbox) == 1
     assert mail.outbox[0].to == ["buyer@example.com"]
+
+
+@pytest.mark.django_db
+def test_invoice_email_service_raises_domain_exception_on_delivery_failure(
+    invoice: Invoice,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Email service should expose delivery failures as domain exceptions."""
+
+    def raise_delivery_error(*args: object, **kwargs: object) -> None:
+        """Raise a fake mail-provider failure."""
+        raise RuntimeError("SMTP unavailable")
+
+    monkeypatch.setattr("django.core.mail.EmailMultiAlternatives.send", raise_delivery_error)
+
+    with pytest.raises(EmailDeliveryException):
+        InvoiceEmailService.send_invoice_email(invoice)
 
 
 @pytest.mark.django_db

@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from apps.billing.selectors import get_invoice, list_denominations, list_invoices
 from apps.billing.serializers import InvoiceCreateSerializer, InvoiceSerializer
 from apps.billing.services import InvoiceService
+from apps.customers.selectors import get_customer_invoices
 from apps.products.selectors import list_active_products
 
 
@@ -134,8 +135,6 @@ class PurchaseHistoryPageView(View):
         email = request.GET.get("email", "")
         invoices = []
         if email:
-            from apps.customers.selectors import get_customer_invoices
-
             invoices = get_customer_invoices(email)
         return render(
             request,
